@@ -1,5 +1,5 @@
 {
-  "name": "expo-wallet",
+  "name": "@kyzegs/expo-wallet",
   "version": "0.1.0",
   "description": "Unified Apple Wallet and Google Wallet API for Expo",
   "main": "build/index.js",
