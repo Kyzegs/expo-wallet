@@ -1,50 +1,144 @@
 package expo.modules.wallet
 
+import android.app.Activity
+import com.google.android.gms.pay.Pay
+import com.google.android.gms.pay.PayApiAvailabilityStatus
+import com.google.android.gms.pay.PayClient
+import expo.modules.kotlin.exception.CodedException
 import expo.modules.kotlin.modules.Module
 import expo.modules.kotlin.modules.ModuleDefinition
-import java.net.URL
+import expo.modules.kotlin.Promise
 
 class ExpoWalletModule : Module() {
-  // Each module class must implement the definition function. The definition consists of components
-  // that describes the module's functionality and behavior.
-  // See https://docs.expo.dev/modules/module-api for more details about available components.
+  private var pendingSavePassesPromise: Promise? = null
+
   override fun definition() = ModuleDefinition {
-    // Sets the name of the module that JavaScript code will use to refer to the module. Takes a string as an argument.
-    // Can be inferred from module's class name, but it's recommended to set it explicitly for clarity.
-    // The module will be accessible from `requireNativeModule('ExpoWallet')` in JavaScript.
     Name("ExpoWallet")
 
-    // Defines constant property on the module.
-    Constant("PI") {
-      Math.PI
+    AsyncFunction("canAddPass") { promise: Promise ->
+      val context = appContext.reactContext
+        ?: run {
+          promise.resolve(false)
+          return@AsyncFunction
+        }
+      val payClient = Pay.getClient(context)
+      payClient
+        .getPayApiAvailabilityStatus(PayClient.RequestType.SAVE_PASSES)
+        .addOnSuccessListener { status: Int ->
+          promise.resolve(status == PayApiAvailabilityStatus.AVAILABLE)
+        }
+        .addOnFailureListener { promise.resolve(false) }
     }
 
-    // Defines event names that the module can send to JavaScript.
-    Events("onChange")
-
-    // Defines a JavaScript synchronous function that runs the native code on the JavaScript thread.
-    Function("hello") {
-      "Hello world! 👋"
+    AsyncFunction("hasPass") { _: String, _: String ->
+      throw CodedException(
+        "ERR_UNSUPPORTED_CLIENT_SIDE",
+        "Google Wallet does not support checking pass existence from the Android client. Use the Google Wallet REST API from your backend.",
+        null
+      )
     }
 
-    // Defines a JavaScript function that always returns a Promise and whose native code
-    // is by default dispatched on the different thread than the JavaScript runtime runs on.
-    AsyncFunction("setValueAsync") { value: String ->
-      // Send an event to JavaScript.
-      sendEvent("onChange", mapOf(
-        "value" to value
-      ))
-    }
-
-    // Enables the module to be used as a native view. Definition components that are accepted as part of
-    // the view definition: Prop, Events.
-    View(ExpoWalletView::class) {
-      // Defines a setter for the `url` prop.
-      Prop("url") { view: ExpoWalletView, url: URL ->
-        view.webView.loadUrl(url.toString())
+    AsyncFunction("addPass") { jwt: String, promise: Promise ->
+      if (jwt.isBlank()) {
+        promise.reject(
+          CodedException(
+            "ERR_INVALID_JWT",
+            "addPass requires a non-empty JWT string.",
+            null
+          )
+        )
+        return@AsyncFunction
       }
-      // Defines an event that the view can send to JavaScript.
-      Events("onLoad")
+
+      val activity = appContext.currentActivity
+        ?: run {
+          promise.reject(
+            CodedException(
+              "ERR_NO_ACTIVITY",
+              "No Activity available to launch Google Wallet.",
+              null
+            )
+          )
+          return@AsyncFunction
+        }
+
+      if (pendingSavePassesPromise != null) {
+        promise.reject(
+          CodedException(
+            "ERR_ADD_PASS_IN_PROGRESS",
+            "Another addPass flow is already in progress.",
+            null
+          )
+        )
+        return@AsyncFunction
+      }
+
+      pendingSavePassesPromise = promise
+      val reactContext = appContext.reactContext
+        ?: run {
+          pendingSavePassesPromise = null
+          promise.reject(CodedException("ERR_NO_CONTEXT", "React context lost.", null))
+          return@AsyncFunction
+        }
+      val payClient = Pay.getClient(reactContext)
+      payClient.savePassesJwt(jwt, activity, SAVE_PASSES_REQUEST_CODE)
     }
+
+    OnActivityResult { _, payload ->
+      if (payload.requestCode != SAVE_PASSES_REQUEST_CODE) {
+        return@OnActivityResult
+      }
+
+      val promise = pendingSavePassesPromise ?: return@OnActivityResult
+      pendingSavePassesPromise = null
+
+      when (payload.resultCode) {
+        Activity.RESULT_OK -> promise.resolve(true)
+        Activity.RESULT_CANCELED -> promise.resolve(false)
+        PayClient.SavePassesResult.SAVE_ERROR -> {
+          val message =
+            payload.data?.getStringExtra(PayClient.EXTRA_API_ERROR_MESSAGE)
+              ?: "Google Wallet reported SAVE_ERROR."
+          promise.reject(
+            CodedException(
+              "ERR_WALLET_SAVE_ERROR",
+              message,
+              null
+            )
+          )
+        }
+        PayClient.SavePassesResult.API_UNAVAILABLE -> {
+          promise.reject(
+            CodedException(
+              "ERR_WALLET_API_UNAVAILABLE",
+              "Google Wallet save API is unavailable on this device.",
+              null
+            )
+          )
+        }
+        PayClient.SavePassesResult.INTERNAL_ERROR -> {
+          promise.reject(
+            CodedException(
+              "ERR_WALLET_INTERNAL",
+              "Google Wallet reported an internal error. Try again later.",
+              null
+            )
+          )
+        }
+        else -> {
+          promise.reject(
+            CodedException(
+              "ERR_WALLET_UNKNOWN_RESULT",
+              "Unexpected result code: ${payload.resultCode}",
+              null
+            )
+          )
+        }
+      }
+    }
+  }
+
+  companion object {
+    private const val SAVE_PASSES_REQUEST_CODE = 0x6578_7077 // "expw"
   }
 }

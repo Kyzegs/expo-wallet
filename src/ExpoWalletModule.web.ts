@@ -1,15 +1,19 @@
 import { registerWebModule, NativeModule } from 'expo';
 
-import { ExpoWalletModuleEvents } from './ExpoWallet.types';
+import type { ExpoWalletNativeModule } from './ExpoWallet.types';
 
-class ExpoWalletModule extends NativeModule<ExpoWalletModuleEvents> {
-  PI = Math.PI;
-  async setValueAsync(value: string): Promise<void> {
-    this.emit('onChange', { value });
+class ExpoWalletModuleWeb extends NativeModule implements ExpoWalletNativeModule {
+  async canAddPass(): Promise<boolean> {
+    return false;
   }
-  hello() {
-    return 'Hello world! 👋';
+
+  async hasPass(_passTypeIdentifier: string, _serialNumber: string): Promise<boolean> {
+    return false;
+  }
+
+  async addPass(_payload: Array<Record<string, string>> | string): Promise<boolean> {
+    throw new Error('expo-wallet: Wallet APIs are not available on web.');
   }
 }
 
-export default registerWebModule(ExpoWalletModule, 'ExpoWalletModule');
+export default registerWebModule(ExpoWalletModuleWeb, 'ExpoWallet');

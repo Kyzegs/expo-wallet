@@ -25,7 +25,7 @@
   "bugs": {
     "url": "/issues"
   },
-  "author": "Sebastiaan <s.zegers@pay.nl> ()",
+  "author": "Sebastiaan <kyzegs@gmail.com> ()",
   "license": "MIT",
   "homepage": "#readme",
   "dependencies": {},
@@ -37,7 +37,14 @@
   },
   "peerDependencies": {
     "expo": "*",
+    "expo-modules-core": "*",
     "react": "*",
-    "react-native": "*"
+    "react-native": "*",
+    "expo-file-system": "*"
+  },
+  "peerDependenciesMeta": {
+    "expo-file-system": {
+      "optional": true
+    }
   }
 }
