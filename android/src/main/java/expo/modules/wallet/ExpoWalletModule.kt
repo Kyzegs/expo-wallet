@@ -30,12 +30,9 @@ class ExpoWalletModule : Module() {
         .addOnFailureListener { promise.resolve(false) }
     }
 
-    AsyncFunction("hasPass") { _: String, _: String ->
-      throw CodedException(
-        "ERR_UNSUPPORTED_CLIENT_SIDE",
-        "Google Wallet does not support checking pass existence from the Android client. Use the Google Wallet REST API from your backend.",
-        null
-      )
+    AsyncFunction("hasPass") { _passTypeIdentifier: String, _serialNumber: String ->
+      // Google Wallet has no client-side pass lookup; JS layer warns and returns false on Android.
+      false
     }
 
     AsyncFunction("addPass") { jwt: String, promise: Promise ->
