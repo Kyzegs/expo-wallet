@@ -30,5 +30,7 @@ Pod::Spec.new do |s|
 
   s.test_spec 'Tests' do |test_spec|
     test_spec.source_files = 'Tests/**/*.swift'
+    # The test bundle links React Native's C++ static libraries through ExpoModulesCore.
+    test_spec.libraries = 'c++'
   end
 end
