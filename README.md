@@ -265,7 +265,7 @@ npm run typecheck    # sources, tests, mocks and the config plugin
 npm test             # Jest on iOS, Android, web and Node, plus the config plugin
 ```
 
-The native iOS tests in `ios/Tests` run in CI. To run them locally, prebuild the example app, change `use_expo_modules!` to `use_expo_modules!({ includeTests: true })` in `example/ios/Podfile`, run `pod install`, and run the `ExpoWallet-Unit-Tests` scheme in Xcode.
+The native iOS tests in `ios/Tests` run in CI. To run them locally, prebuild the example app (`npx expo prebuild -p ios` in `example/`), add `pod "ExpoWallet", path: "../../ios", testspecs: ["Tests"]` above `use_expo_modules!` in `example/ios/Podfile`, run `pod install`, and run the `ExpoWallet-Unit-Tests` scheme in Xcode.
 
 [CI](.github/workflows/ci.yml) runs these checks. For every supported Expo SDK, it also installs the packed package into a fresh app and builds it for iOS and Android.
 

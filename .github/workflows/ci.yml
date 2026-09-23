@@ -157,8 +157,10 @@ jobs:
         run: |
           npm ci
           npx expo prebuild --platform ios --no-install
-          sed -i '' 's/^\( *\)use_expo_modules!$/\1use_expo_modules!({ includeTests: true })/' ios/Podfile
-          grep -q 'includeTests: true' ios/Podfile
+          # Declare the pod with its test spec before autolinking, which then skips it. (Using
+          # `includeTests: true` would pull in the test specs of Expo's own pods too.)
+          ruby -i -pe 'sub(/^(\s*)use_expo_modules!$/) { "#{$1}pod \"ExpoWallet\", path: \"../../ios\", testspecs: [\"Tests\"]\n#{$1}use_expo_modules!" }' ios/Podfile
+          grep -q 'testspecs: \["Tests"\]' ios/Podfile
           pod install --project-directory=ios
 
       - name: Run tests
