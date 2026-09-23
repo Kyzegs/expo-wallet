@@ -9,7 +9,8 @@ enum ApplePresentation: String, Enumerable {
 
 /// Shows the Apple Wallet UI for one `addPass` call and reports `"added"` or `"cancelled"` once.
 @MainActor
-final class AddPassesFlow: NSObject, PKAddPassesViewControllerDelegate, UIAdaptivePresentationControllerDelegate {
+// PassKit's delegate protocol isn't annotated for concurrency, but PassKit calls it on the main thread.
+final class AddPassesFlow: NSObject, @preconcurrency PKAddPassesViewControllerDelegate, UIAdaptivePresentationControllerDelegate {
   private let passes: [PKPass]
   // Created and used on the main thread only; `PKPassLibrary` isn't thread-safe.
   private let library = PKPassLibrary()

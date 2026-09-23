@@ -113,7 +113,8 @@ final class PassLoaderTests: XCTestCase {
     base64: String? = nil,
     dataIndex: Int? = nil
   ) -> PassSource {
-    var source = PassSource()
+    // `@Field` wraps each value in a class, so the struct itself isn't mutated.
+    let source = PassSource()
     source.uri = uri
     source.headers = headers
     source.base64 = base64

@@ -172,5 +172,10 @@ jobs:
             -workspace "$(ls -d *.xcworkspace)" \
             -scheme ExpoWallet-Unit-Tests \
             -destination "id=$device" \
+            -resultBundlePath "$RUNNER_TEMP/tests.xcresult" \
             CODE_SIGNING_ALLOWED=NO \
             -quiet
+          # `-quiet` hides the summary, and an empty test bundle would also pass.
+          xcrun xcresulttool get test-results summary --path "$RUNNER_TEMP/tests.xcresult" --format json \
+            | tee "$RUNNER_TEMP/summary.json"
+          jq -e '.totalTestCount > 0 and .failedTests == 0' "$RUNNER_TEMP/summary.json"

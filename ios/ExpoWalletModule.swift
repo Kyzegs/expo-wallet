@@ -68,19 +68,12 @@ public final class ExpoWalletModule: Module {
       library.removePass(pass)
     }
 
-    AsyncFunction("openPass") { (passTypeIdentifier: String, serialNumber: String, promise: Promise) in
+    AsyncFunction("openPass") { (passTypeIdentifier: String, serialNumber: String) async throws in
       guard let url = PKPassLibrary().pass(withPassTypeIdentifier: passTypeIdentifier, serialNumber: serialNumber)?.passURL else {
-        promise.reject(WalletException.passNotFound(passTypeIdentifier, serialNumber))
-        return
+        throw WalletException.passNotFound(passTypeIdentifier, serialNumber)
       }
-      Task { @MainActor in
-        UIApplication.shared.open(url, options: [:]) { opened in
-          if opened {
-            promise.resolve()
-          } else {
-            promise.reject(WalletException.unavailable("Couldn't open the Wallet app."))
-          }
-        }
+      guard await UIApplication.shared.open(url) else {
+        throw WalletException.unavailable("Couldn't open the Wallet app.")
       }
     }
 
