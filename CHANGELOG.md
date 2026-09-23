@@ -25,6 +25,8 @@ A redesigned API. See [Migrating from 0.2](README.md#migrating-from-02).
 - Typed error codes (`WalletErrorCode`) and `isWalletError()`.
 - Config plugin that sets the `com.apple.developer.pass-type-identifiers` entitlement.
 - Works without a crash in apps built without the native module (e.g. Expo Go): `canAddPasses()` resolves `false`.
+- Supports Expo SDK 53–57. SDK 53–55 apps need iOS 16.4 as their deployment target.
+- Jest mock (`mocks/ExpoWallet.ts`) that jest-expo loads automatically in apps' tests.
 
 ### Fixes
 

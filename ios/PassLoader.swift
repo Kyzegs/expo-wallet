@@ -110,7 +110,7 @@ enum PassLoader {
   }
 
   /// Accepts standard and URL-safe base64, with or without padding.
-  private static func decodeBase64(_ string: String) -> Data? {
+  static func decodeBase64(_ string: String) -> Data? {
     var base64 = string
       .replacingOccurrences(of: "-", with: "+")
       .replacingOccurrences(of: "_", with: "/")

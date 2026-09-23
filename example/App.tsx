@@ -8,18 +8,10 @@ import {
   isWalletError,
   openPass,
   type Pass,
-} from 'expo-wallet';
+} from '@kyzegs/expo-wallet';
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
-import {
-  Button,
-  Linking,
-  Platform,
-  SafeAreaView,
-  ScrollView,
-  Text,
-  TextInput,
-  View,
-} from 'react-native';
+import { Button, Linking, Platform, ScrollView, Text, TextInput, View } from 'react-native';
+import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 
 /** Replace with your own test pass URL and JWT. */
 const SAMPLE_PKPASS_URL = 'https://example.com/pass.pkpass';
@@ -71,53 +63,55 @@ export default function App() {
   };
 
   return (
-    <SafeAreaView style={styles.container}>
-      <ScrollView contentContainerStyle={styles.scroll}>
-        <Text style={styles.header}>expo-wallet example</Text>
+    <SafeAreaProvider>
+      <SafeAreaView style={styles.container}>
+        <ScrollView contentContainerStyle={styles.scroll}>
+          <Text style={styles.header}>expo-wallet example</Text>
 
-        <Group title="Add a pass">
-          <Text style={styles.hint}>canAddPasses → {String(available)}</Text>
-          <TextInput
-            style={styles.input}
-            value={pkpassUrl}
-            onChangeText={setPkpassUrl}
-            placeholder="https://…/pass.pkpass (iOS)"
-            autoCapitalize="none"
-          />
-          <TextInput
-            style={styles.input}
-            value={jwt}
-            onChangeText={setJwt}
-            placeholder="Google Wallet JWT (Android)"
-            autoCapitalize="none"
-            multiline
-          />
-          {Platform.OS === 'ios' ? (
-            <AppleWalletButton onPress={add} disabled={!available} />
-          ) : (
-            <Button title="Add to Google Wallet" onPress={add} disabled={!available} />
-          )}
-        </Group>
-
-        {Platform.OS === 'ios' && (
-          <Group title={`Passes this app can access (${passes.length})`}>
-            {passes.map((pass) => (
-              <Button
-                key={`${pass.passTypeIdentifier}/${pass.serialNumber}`}
-                title={`${pass.localizedName}: ${pass.serialNumber}`}
-                onPress={() => openPass(pass).catch((e) => appendLog(`openPass error: ${e}`))}
-              />
-            ))}
+          <Group title="Add a pass">
+            <Text style={styles.hint}>canAddPasses → {String(available)}</Text>
+            <TextInput
+              style={styles.input}
+              value={pkpassUrl}
+              onChangeText={setPkpassUrl}
+              placeholder="https://…/pass.pkpass (iOS)"
+              autoCapitalize="none"
+            />
+            <TextInput
+              style={styles.input}
+              value={jwt}
+              onChangeText={setJwt}
+              placeholder="Google Wallet JWT (Android)"
+              autoCapitalize="none"
+              multiline
+            />
+            {Platform.OS === 'ios' ? (
+              <AppleWalletButton onPress={add} disabled={!available} />
+            ) : (
+              <Button title="Add to Google Wallet" onPress={add} disabled={!available} />
+            )}
           </Group>
-        )}
 
-        <Group title="Log">
-          <Text selectable style={styles.log}>
-            {log.trim() || '…'}
-          </Text>
-        </Group>
-      </ScrollView>
-    </SafeAreaView>
+          {Platform.OS === 'ios' && (
+            <Group title={`Passes this app can access (${passes.length})`}>
+              {passes.map((pass) => (
+                <Button
+                  key={`${pass.passTypeIdentifier}/${pass.serialNumber}`}
+                  title={`${pass.localizedName}: ${pass.serialNumber}`}
+                  onPress={() => openPass(pass).catch((e) => appendLog(`openPass error: ${e}`))}
+                />
+              ))}
+            </Group>
+          )}
+
+          <Group title="Log">
+            <Text selectable style={styles.log}>
+              {log.trim() || '…'}
+            </Text>
+          </Group>
+        </ScrollView>
+      </SafeAreaView>
+    </SafeAreaProvider>
   );
 }
 

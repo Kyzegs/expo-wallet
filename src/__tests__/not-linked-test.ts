@@ -8,7 +8,7 @@ it('reports no wallet instead of crashing', async () => {
   await expect(canAddPasses()).resolves.toBe(false);
   await expect(canAddPasses()).resolves.toBe(false);
   expect(warn).toHaveBeenCalledTimes(1);
-  expect(warn.mock.calls[0][0]).toMatch(/Expo Go/);
+  expect(warn).toHaveBeenCalledWith(expect.stringMatching(/Expo Go/));
   warn.mockRestore();
 });
 

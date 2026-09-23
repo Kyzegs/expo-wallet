@@ -26,7 +26,28 @@ import { AppleWalletButton, addPass } from '@kyzegs/expo-wallet';
 npx expo install @kyzegs/expo-wallet
 ```
 
-This package has native code, so it doesn't run in Expo Go. Use a [development build](https://docs.expo.dev/develop/development-builds/introduction/) (`npx expo run:ios` / `npx expo run:android`). It requires iOS 16.4+.
+This package has native code, so it doesn't run in Expo Go. Use a [development build](https://docs.expo.dev/develop/development-builds/introduction/) (`npx expo run:ios` / `npx expo run:android`).
+
+### Compatibility
+
+| Expo SDK | Supported | iOS setup |
+| --- | --- | --- |
+| 56, 57 | ✅ | None |
+| 53, 54, 55 | ✅ | Raise the deployment target to iOS 16.4 (below) |
+
+CI builds a fresh app on each of these SDKs for iOS and Android. It needs iOS 16.4+, the default from SDK 56. On SDK 53–55, set the deployment target with [`expo-build-properties`](https://docs.expo.dev/versions/latest/sdk/build-properties/):
+
+```bash
+npx expo install expo-build-properties
+```
+
+```json
+{
+  "expo": {
+    "plugins": [["expo-build-properties", { "ios": { "deploymentTarget": "16.4" } }]]
+  }
+}
+```
 
 ### Config plugin (optional)
 
@@ -193,6 +214,22 @@ try {
 | `ERR_WALLET_INTERNAL` | The wallet reported an unexpected error |
 | `ERR_UNAVAILABLE` | The function doesn't exist on this platform |
 
+## Testing your app
+
+The package includes a mock of its native module that [jest-expo](https://docs.expo.dev/develop/unit-testing/) loads automatically. In Jest, `canAddPasses()` resolves `true`, `addPass()` resolves `'added'`, and the library functions return empty results. Override them per test with `jest.mocked()` or `jest.spyOn()`.
+
+The package ships ES modules, so let Jest transform it:
+
+```js
+// jest.config.js
+module.exports = {
+  preset: 'jest-expo',
+  transformIgnorePatterns: [
+    'node_modules/(?!((jest-)?react-native|@react-native(-community)?)|expo(nent)?|@expo(nent)?/.*|@kyzegs/expo-wallet)',
+  ],
+};
+```
+
 ## Migrating from 0.2
 
 | 0.2 | Now |
@@ -221,12 +258,16 @@ Put a real `.pkpass` URL and Google Wallet JWT in `example/App.tsx`.
 ## Development
 
 ```bash
-npm install
-npm run build        # TypeScript → build/
-npm run build plugin # config plugin → plugin/build/
+npm install          # also builds build/ and plugin/build/
+npm run build        # TypeScript → build/ and plugin/build/
 npm run lint
-npm test             # Jest on iOS, Android, web and Node
+npm run typecheck    # sources, tests, mocks and the config plugin
+npm test             # Jest on iOS, Android, web and Node, plus the config plugin
 ```
+
+The native iOS tests in `ios/Tests` run in CI. To run them locally, prebuild the example app, change `use_expo_modules!` to `use_expo_modules!({ includeTests: true })` in `example/ios/Podfile`, run `pod install`, and run the `ExpoWallet-Unit-Tests` scheme in Xcode.
+
+[CI](.github/workflows/ci.yml) runs these checks. For every supported Expo SDK, it also installs the packed package into a fresh app and builds it for iOS and Android.
 
 ## License
 

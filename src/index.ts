@@ -11,8 +11,8 @@ import type {
   WalletError,
   WalletErrorCode,
 } from './ExpoWallet.types';
-import ExpoWalletModule, { type ExpoWalletNativeModule } from './ExpoWalletModule';
-import { normalizeApplePasses, normalizeGooglePass } from './normalize';
+import nativeModule, { type ExpoWalletModule } from './ExpoWalletModule';
+import { normalizeApplePass, normalizeApplePasses, normalizeGooglePass } from './normalize';
 
 export type * from './ExpoWallet.types';
 export { default as AppleWalletButton } from './AppleWalletButton';
@@ -31,11 +31,11 @@ const GOOGLE_LOOKUP_HINT =
 const NOT_LINKED =
   "expo-wallet's native module isn't in this build. Rebuild the app (npx expo run:ios / run:android); Expo Go doesn't include it.";
 
-function native(name: string): ExpoWalletNativeModule {
-  if (ExpoWalletModule == null) {
+function native(name: string): ExpoWalletModule {
+  if (nativeModule == null) {
     throw new CodedError('ERR_UNAVAILABLE', `expo-wallet: ${name}() failed. ${NOT_LINKED}`);
   }
-  return ExpoWalletModule;
+  return nativeModule;
 }
 
 let warnedNotLinked = false;
@@ -47,14 +47,14 @@ let warnedNotLinked = false;
  * Android. Use it to decide whether to show an "Add to Wallet" button. Always `false` on the web.
  */
 export async function canAddPasses(): Promise<boolean> {
-  if (ExpoWalletModule == null) {
+  if (nativeModule == null) {
     if (__DEV__ && !warnedNotLinked) {
       warnedNotLinked = true;
       console.warn(`${NOT_LINKED} canAddPasses() returns false.`);
     }
     return false;
   }
-  return ExpoWalletModule.canAddPasses();
+  return nativeModule.canAddPasses();
 }
 
 /**
@@ -170,8 +170,8 @@ export async function hasPass(pass: PassIdentifier | ApplePass): Promise<boolean
   if (isPassIdentifier(pass)) {
     return (await native('hasPass').getPass(pass.passTypeIdentifier, pass.serialNumber)) != null;
   }
-  const { sources, blobs } = normalizeApplePasses(pass);
-  return native('hasPass').containsPass(sources[0], blobs);
+  const { source, blobs } = normalizeApplePass(pass);
+  return native('hasPass').containsPass(source, blobs);
 }
 
 function isPassIdentifier(pass: PassIdentifier | ApplePass): pass is PassIdentifier {
@@ -215,11 +215,8 @@ export async function replacePass(pass: ApplePass): Promise<boolean> {
   if (Platform.OS !== 'ios') {
     throw iosOnly('replacePass');
   }
-  const { sources, blobs } = normalizeApplePasses(pass);
-  if (sources.length !== 1) {
-    throw new CodedError('ERR_WALLET_INVALID_PASS', 'expo-wallet: replacePass() takes one pass.');
-  }
-  return native('replacePass').replacePass(sources[0], blobs);
+  const { source, blobs } = normalizeApplePass(pass);
+  return native('replacePass').replacePass(source, blobs);
 }
 
 /**
@@ -236,8 +233,8 @@ export async function replacePass(pass: ApplePass): Promise<boolean> {
 export function addPassLibraryListener(
   listener: (event: PassLibraryChangeEvent) => void
 ): EventSubscription {
-  if (Platform.OS !== 'ios' || ExpoWalletModule == null) {
+  if (Platform.OS !== 'ios' || nativeModule == null) {
     return { remove() {} };
   }
-  return ExpoWalletModule.addListener('onPassLibraryChange', listener);
+  return nativeModule.addListener('onPassLibraryChange', listener);
 }

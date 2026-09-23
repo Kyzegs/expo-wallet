@@ -19,7 +19,7 @@ config.resolver.nodeModulesPaths = [
 ];
 
 config.resolver.extraNodeModules = {
-  'expo-wallet': '..',
+  '@kyzegs/expo-wallet': '..',
 };
 
 config.watchFolders = [path.resolve(__dirname, '..')];

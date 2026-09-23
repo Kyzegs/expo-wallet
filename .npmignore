@@ -14,5 +14,8 @@ __tests__
 /example/
 
 /.prettierrc
-/eslint.config.js
+/eslint.config.cjs
+/jest.config.js
+/tsconfig.test.json
 *.tsbuildinfo
+/ios/Tests/

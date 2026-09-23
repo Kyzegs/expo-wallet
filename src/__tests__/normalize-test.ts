@@ -38,15 +38,15 @@ describe(normalizeApplePasses, () => {
     expect(sources).toEqual([{ dataIndex: 0 }, { uri: 'file:///tmp/b.pkpass' }, { dataIndex: 1 }]);
     expect(blobs[0]).toBe(bytes);
     expect(blobs[1]).toBeInstanceOf(Uint8Array);
-    expect(Array.from(blobs[1])).toEqual([4, 5]);
+    expect(Array.from(blobs[1] ?? [])).toEqual([4, 5]);
   });
 
   it('rewraps other typed arrays as Uint8Array without copying', () => {
     const view = new Uint16Array([1, 2]);
     const { blobs } = normalizeApplePasses({ data: view as unknown as Uint8Array });
     expect(blobs[0]).toBeInstanceOf(Uint8Array);
-    expect(blobs[0].buffer).toBe(view.buffer);
-    expect(blobs[0].byteLength).toBe(4);
+    expect(blobs[0]?.buffer).toBe(view.buffer);
+    expect(blobs[0]?.byteLength).toBe(4);
   });
 
   it('rejects empty arrays and unknown shapes with the index', () => {

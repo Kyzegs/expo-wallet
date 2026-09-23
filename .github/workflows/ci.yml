@@ -1,0 +1,171 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  NODE_VERSION: 22
+
+jobs:
+  check:
+    name: Lint, typecheck, test
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            example/package-lock.json
+
+      # Also builds `build/` and `plugin/build/` through the `prepare` script.
+      - run: npm ci
+      - run: npm run lint -- --max-warnings 0
+      - run: npm run typecheck
+      - run: npm test -- --ci
+
+      - name: Typecheck the example app
+        working-directory: example
+        run: |
+          npm ci
+          npx tsc --noEmit
+
+      - name: Pack the package
+        run: |
+          mkdir -p dist
+          npm pack --pack-destination dist
+          mv dist/*.tgz dist/package.tgz
+      - uses: actions/upload-artifact@v4
+        with:
+          name: package
+          path: dist/package.tgz
+          if-no-files-found: error
+
+  # Installs the packed package into a fresh app for every supported Expo SDK, checks the public
+  # types against that SDK and compiles the native code.
+  compat:
+    name: SDK ${{ matrix.sdk }} ${{ matrix.platform }}
+    needs: check
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        sdk: [53, 54, 55, 56, 57]
+        platform: [android, ios]
+        include:
+          - platform: android
+            runner: ubuntu-latest
+          - platform: ios
+            runner: macos-26
+            xcode: latest-stable
+          # SDK 53 predates Xcode 26.
+          - sdk: 53
+            platform: ios
+            runner: macos-15
+            xcode: '16.4'
+    env:
+      APP_DIR: ${{ github.workspace }}/../compat-app
+      CI: 1
+      EXPO_NO_GIT_STATUS: 1
+      EXPO_NO_TELEMETRY: 1
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - uses: actions/download-artifact@v4
+        with:
+          name: package
+          path: dist
+
+      - if: matrix.platform == 'android'
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 17
+          cache: gradle
+      - if: matrix.platform == 'ios'
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: ${{ matrix.xcode }}
+
+      - name: Create an SDK ${{ matrix.sdk }} app with the package
+        run: .github/compat/create-app.sh ${{ matrix.sdk }} dist/package.tgz "$APP_DIR"
+
+      - name: Prebuild
+        working-directory: ${{ env.APP_DIR }}
+        run: npx expo prebuild --platform ${{ matrix.platform }}
+
+      - name: Build Android
+        if: matrix.platform == 'android'
+        working-directory: ${{ env.APP_DIR }}/android
+        run: ./gradlew assembleDebug -PreactNativeArchitectures=x86_64 --no-daemon
+
+      - name: Build iOS
+        if: matrix.platform == 'ios'
+        working-directory: ${{ env.APP_DIR }}/ios
+        run: |
+          workspace=$(ls -d *.xcworkspace)
+          xcodebuild build \
+            -workspace "$workspace" \
+            -scheme "${workspace%.xcworkspace}" \
+            -configuration Debug \
+            -sdk iphonesimulator \
+            -destination 'generic/platform=iOS Simulator' \
+            CODE_SIGNING_ALLOWED=NO \
+            -quiet
+
+  # Runs the XCTest specs in ios/Tests (the podspec's test_spec) in the example app.
+  ios-unit-tests:
+    name: iOS unit tests
+    runs-on: macos-26
+    timeout-minutes: 60
+    env:
+      CI: 1
+      EXPO_NO_GIT_STATUS: 1
+      EXPO_NO_TELEMETRY: 1
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: example/package-lock.json
+      - uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+
+      - name: Prebuild the example app with test specs
+        working-directory: example
+        run: |
+          npm ci
+          npx expo prebuild --platform ios --no-install
+          sed -i '' 's/^\( *\)use_expo_modules!$/\1use_expo_modules!({ includeTests: true })/' ios/Podfile
+          grep -q 'includeTests: true' ios/Podfile
+          pod install --project-directory=ios
+
+      - name: Run tests
+        working-directory: example/ios
+        run: |
+          device=$(xcrun simctl list devices available --json \
+            | jq -r '[.devices[][] | select(.name | startswith("iPhone"))][0].udid')
+          xcodebuild test \
+            -workspace "$(ls -d *.xcworkspace)" \
+            -scheme ExpoWallet-Unit-Tests \
+            -destination "id=$device" \
+            CODE_SIGNING_ALLOWED=NO \
+            -quiet

@@ -2,7 +2,7 @@ import { type ConfigPlugin, createRunOncePlugin, withEntitlementsPlist } from 'e
 
 const pkg: { name: string; version: string } = require('../../package.json');
 
-const PASS_TYPE_IDENTIFIERS = 'com.apple.developer.pass-type-identifiers';
+export const PASS_TYPE_IDENTIFIERS = 'com.apple.developer.pass-type-identifiers';
 
 export interface ExpoWalletPluginProps {
   /**
@@ -20,19 +20,44 @@ function withTeamPrefix(identifier: string): string {
     : `$(TeamIdentifierPrefix)${identifier}`;
 }
 
+/** Adds the pass type identifiers to the entitlements, keeping existing values and other keys. */
+export function setPassTypeIdentifiers(
+  entitlements: Record<string, any>,
+  identifiers: string[]
+): Record<string, any> {
+  const existing = entitlements[PASS_TYPE_IDENTIFIERS];
+  const current = Array.isArray(existing)
+    ? existing.filter((value): value is string => typeof value === 'string')
+    : [];
+  return {
+    ...entitlements,
+    [PASS_TYPE_IDENTIFIERS]: [...new Set([...current, ...identifiers.map(withTeamPrefix)])],
+  };
+}
+
+function validateProps(props: ExpoWalletPluginProps | void): string[] {
+  const identifiers = props?.passTypeIdentifiers;
+  if (identifiers == null) {
+    return [];
+  }
+  if (
+    !Array.isArray(identifiers) ||
+    identifiers.some((id) => typeof id !== 'string' || id.trim().length === 0)
+  ) {
+    throw new Error(
+      `${pkg.name}: "passTypeIdentifiers" must be an array of pass type IDs, such as ["pass.com.example.ticket"].`
+    );
+  }
+  return identifiers.map((id) => id.trim());
+}
+
 const withExpoWallet: ConfigPlugin<ExpoWalletPluginProps | void> = (config, props) => {
-  const identifiers = props?.passTypeIdentifiers ?? [];
+  const identifiers = validateProps(props);
   if (identifiers.length === 0) {
     return config;
   }
   return withEntitlementsPlist(config, (config) => {
-    const existing = config.modResults[PASS_TYPE_IDENTIFIERS];
-    const current = Array.isArray(existing)
-      ? existing.filter((value): value is string => typeof value === 'string')
-      : [];
-    config.modResults[PASS_TYPE_IDENTIFIERS] = [
-      ...new Set([...current, ...identifiers.map(withTeamPrefix)]),
-    ];
+    config.modResults = setPassTypeIdentifiers(config.modResults, identifiers);
     return config;
   });
 };

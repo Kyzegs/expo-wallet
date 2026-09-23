@@ -91,6 +91,19 @@ export function normalizeApplePasses(input: ApplePass | ApplePass[]): {
   return { sources, blobs };
 }
 
+/** Like `normalizeApplePasses`, for functions that take exactly one pass. */
+export function normalizeApplePass(input: ApplePass): {
+  source: NativeApplePassSource;
+  blobs: Uint8Array[];
+} {
+  const { sources, blobs } = normalizeApplePasses(input);
+  const [source] = sources;
+  if (source == null || sources.length > 1) {
+    throw invalidPass('Pass one Apple pass, not an array.');
+  }
+  return { source, blobs };
+}
+
 /** Turns the public `GooglePass` input into the argument for `savePassesJwt` or `savePasses`. */
 export function normalizeGooglePass(input: GooglePass): { kind: 'jwt' | 'json'; value: string } {
   if (typeof input === 'string') {
@@ -99,7 +112,7 @@ export function normalizeGooglePass(input: GooglePass): { kind: 'jwt' | 'json'; 
       return { kind: 'json', value };
     }
     const jwt = value.startsWith(GOOGLE_SAVE_URL_PREFIX)
-      ? value.slice(GOOGLE_SAVE_URL_PREFIX.length).split(/[?#]/)[0]
+      ? (value.slice(GOOGLE_SAVE_URL_PREFIX.length).split(/[?#]/)[0] ?? '')
       : value;
     if (jwt.length === 0) {
       throw invalidPass('Google pass JWT is empty.');
