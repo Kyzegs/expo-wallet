@@ -1,8 +1,9 @@
 name: CI
 
+# Every push to this repository runs CI. Pull requests run it only when they come from a fork,
+# because a same-repository pull request's branch is already covered by its pushes.
 on:
   push:
-    branches: [main]
   pull_request:
   workflow_dispatch:
 
@@ -19,6 +20,7 @@ env:
 jobs:
   check:
     name: Lint, typecheck, test
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.repository
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -132,6 +134,7 @@ jobs:
   # Runs the XCTest specs in ios/Tests (the podspec's test_spec) in the example app.
   ios-unit-tests:
     name: iOS unit tests
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.repository
     runs-on: macos-26
     timeout-minutes: 60
     env:
