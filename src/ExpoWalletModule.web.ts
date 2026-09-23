@@ -1,18 +1,9 @@
 import { registerWebModule, NativeModule } from 'expo';
 
-import type { ExpoWalletNativeModule } from './ExpoWallet.types';
-
-class ExpoWalletModuleWeb extends NativeModule implements ExpoWalletNativeModule {
-  async canAddPass(): Promise<boolean> {
+// Browsers have no wallet API. For Google Wallet on the web, link to `getGoogleWalletSaveUrl(jwt)`.
+class ExpoWalletModuleWeb extends NativeModule {
+  async canAddPasses(): Promise<boolean> {
     return false;
-  }
-
-  async hasPass(_passTypeIdentifier: string, _serialNumber: string): Promise<boolean> {
-    return false;
-  }
-
-  async addPass(_payload: Array<Record<string, string>> | string): Promise<boolean> {
-    throw new Error('expo-wallet: Wallet APIs are not available on web.');
   }
 }
 

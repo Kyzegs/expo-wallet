@@ -4,138 +4,98 @@ import android.app.Activity
 import com.google.android.gms.pay.Pay
 import com.google.android.gms.pay.PayApiAvailabilityStatus
 import com.google.android.gms.pay.PayClient
+import expo.modules.kotlin.Promise
 import expo.modules.kotlin.exception.CodedException
+import expo.modules.kotlin.functions.Queues
 import expo.modules.kotlin.modules.Module
 import expo.modules.kotlin.modules.ModuleDefinition
-import expo.modules.kotlin.Promise
 
 class ExpoWalletModule : Module() {
-  private var pendingSavePassesPromise: Promise? = null
+  private var pendingSave: Promise? = null
 
   override fun definition() = ModuleDefinition {
     Name("ExpoWallet")
 
-    AsyncFunction("canAddPass") { promise: Promise ->
-      val context = appContext.reactContext
-        ?: run {
-          promise.resolve(false)
-          return@AsyncFunction
+    AsyncFunction("canAddPasses") { promise: Promise ->
+      // JWT saves are the common case; fall back to the JSON API's availability.
+      isAvailable(PayClient.RequestType.SAVE_PASSES_JWT) { jwtAvailable ->
+        if (jwtAvailable) {
+          promise.resolve(true)
+        } else {
+          isAvailable(PayClient.RequestType.SAVE_PASSES) { promise.resolve(it) }
         }
-      val payClient = Pay.getClient(context)
-      payClient
-        .getPayApiAvailabilityStatus(PayClient.RequestType.SAVE_PASSES)
-        .addOnSuccessListener { status: Int ->
-          promise.resolve(status == PayApiAvailabilityStatus.AVAILABLE)
-        }
-        .addOnFailureListener { promise.resolve(false) }
-    }
-
-    AsyncFunction("hasPass") { _passTypeIdentifier: String, _serialNumber: String ->
-      // Google Wallet has no client-side pass lookup; JS layer warns and returns false on Android.
-      false
-    }
-
-    AsyncFunction("addPass") { jwt: String, promise: Promise ->
-      if (jwt.isBlank()) {
-        promise.reject(
-          CodedException(
-            "ERR_INVALID_JWT",
-            "addPass requires a non-empty JWT string.",
-            null
-          )
-        )
-        return@AsyncFunction
       }
-
-      val activity = appContext.currentActivity
-        ?: run {
-          promise.reject(
-            CodedException(
-              "ERR_NO_ACTIVITY",
-              "No Activity available to launch Google Wallet.",
-              null
-            )
-          )
-          return@AsyncFunction
-        }
-
-      if (pendingSavePassesPromise != null) {
-        promise.reject(
-          CodedException(
-            "ERR_ADD_PASS_IN_PROGRESS",
-            "Another addPass flow is already in progress.",
-            null
-          )
-        )
-        return@AsyncFunction
-      }
-
-      pendingSavePassesPromise = promise
-      val reactContext = appContext.reactContext
-        ?: run {
-          pendingSavePassesPromise = null
-          promise.reject(CodedException("ERR_NO_CONTEXT", "React context lost.", null))
-          return@AsyncFunction
-        }
-      val payClient = Pay.getClient(reactContext)
-      payClient.savePassesJwt(jwt, activity, SAVE_PASSES_REQUEST_CODE)
     }
+
+    AsyncFunction("savePassesJwt") { jwt: String, promise: Promise ->
+      save(promise) { client, activity -> client.savePassesJwt(jwt, activity, SAVE_PASSES_REQUEST_CODE) }
+    }.runOnQueue(Queues.MAIN)
+
+    AsyncFunction("savePasses") { json: String, promise: Promise ->
+      save(promise) { client, activity -> client.savePasses(json, activity, SAVE_PASSES_REQUEST_CODE) }
+    }.runOnQueue(Queues.MAIN)
 
     OnActivityResult { _, payload ->
       if (payload.requestCode != SAVE_PASSES_REQUEST_CODE) {
         return@OnActivityResult
       }
-
-      val promise = pendingSavePassesPromise ?: return@OnActivityResult
-      pendingSavePassesPromise = null
+      val promise = pendingSave ?: return@OnActivityResult
+      pendingSave = null
 
       when (payload.resultCode) {
-        Activity.RESULT_OK -> promise.resolve(true)
-        Activity.RESULT_CANCELED -> promise.resolve(false)
-        PayClient.SavePassesResult.SAVE_ERROR -> {
-          val message =
+        Activity.RESULT_OK -> promise.resolve("added")
+        Activity.RESULT_CANCELED -> promise.resolve("cancelled")
+        PayClient.SavePassesResult.SAVE_ERROR -> promise.reject(
+          WalletException(
+            "ERR_WALLET_SAVE_FAILED",
             payload.data?.getStringExtra(PayClient.EXTRA_API_ERROR_MESSAGE)
-              ?: "Google Wallet reported SAVE_ERROR."
-          promise.reject(
-            CodedException(
-              "ERR_WALLET_SAVE_ERROR",
-              message,
-              null
-            )
+              ?: "Google Wallet couldn't save the pass. Check the JWT or JSON and your issuer setup."
           )
-        }
-        PayClient.SavePassesResult.API_UNAVAILABLE -> {
-          promise.reject(
-            CodedException(
-              "ERR_WALLET_API_UNAVAILABLE",
-              "Google Wallet save API is unavailable on this device.",
-              null
-            )
+        )
+        PayClient.SavePassesResult.API_UNAVAILABLE -> promise.reject(
+          WalletException("ERR_WALLET_UNAVAILABLE", "Google Wallet isn't available on this device.")
+        )
+        else -> promise.reject(
+          WalletException(
+            "ERR_WALLET_INTERNAL",
+            "Google Wallet failed with result code ${payload.resultCode}. Try again later."
           )
-        }
-        PayClient.SavePassesResult.INTERNAL_ERROR -> {
-          promise.reject(
-            CodedException(
-              "ERR_WALLET_INTERNAL",
-              "Google Wallet reported an internal error. Try again later.",
-              null
-            )
-          )
-        }
-        else -> {
-          promise.reject(
-            CodedException(
-              "ERR_WALLET_UNKNOWN_RESULT",
-              "Unexpected result code: ${payload.resultCode}",
-              null
-            )
-          )
-        }
+        )
       }
     }
   }
 
+  private fun isAvailable(requestType: Int, callback: (Boolean) -> Unit) {
+    val context = appContext.reactContext ?: return callback(false)
+    Pay.getClient(context)
+      .getPayApiAvailabilityStatus(requestType)
+      .addOnSuccessListener { status -> callback(status == PayApiAvailabilityStatus.AVAILABLE) }
+      .addOnFailureListener { callback(false) }
+  }
+
+  private fun save(promise: Promise, launch: (PayClient, Activity) -> Unit) {
+    if (pendingSave != null) {
+      promise.reject(WalletException("ERR_WALLET_BUSY", "Another add-pass flow is already on screen."))
+      return
+    }
+    val activity = appContext.currentActivity ?: run {
+      promise.reject(WalletException("ERR_WALLET_PRESENTATION_FAILED", "There is no Activity to launch Google Wallet from."))
+      return
+    }
+    pendingSave = promise
+    try {
+      launch(Pay.getClient(activity), activity)
+    } catch (e: Exception) {
+      pendingSave = null
+      promise.reject(WalletException("ERR_WALLET_INTERNAL", "Couldn't launch Google Wallet: ${e.message}", e))
+    }
+  }
+
   companion object {
-    private const val SAVE_PASSES_REQUEST_CODE = 0x6578_7077 // "expw"
+    private const val SAVE_PASSES_REQUEST_CODE = 0x6577 // "ew"
   }
 }
+
+/** Errors with the `ERR_WALLET_*` codes documented in `ExpoWallet.types.ts`. */
+internal class WalletException(code: String, message: String, cause: Throwable? = null) :
+  CodedException(code, message, cause)

@@ -10,9 +10,9 @@ Pod::Spec.new do |s|
   s.license        = package['license']
   s.author         = package['author']
   s.homepage       = package['homepage']
+  # PassKit's add-pass UI and pass library don't exist on tvOS.
   s.platforms      = {
-    :ios => '16.4',
-    :tvos => '16.4'
+    :ios => '16.4'
   }
   s.swift_version  = '5.9'
   s.source         = { git: '' }
